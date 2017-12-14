@@ -3,7 +3,7 @@
 ### record_linkage
 
 Contains scripts and settings for 1 to 1 dedupe matching between two different csv files.
-Currently set up to match between a csv of unmatched supplier strings from usm3 and a csv of suppleirs from the supplier table
+Currently set up to match between a csv of unmatched supplier strings from usm3 and a master csv of suppliers from the supplier table
 
 - spend_network_linkage_example.py contains the script to carry out the matching.
 
@@ -47,7 +47,7 @@ Contains scripts, settings for deduplicating (clustering) a single file (e.g. a 
 The deduplicator has been trained using manual inputs of roughly 40 positive and negative matches from a 10k sample of usm3.
 Running on roughly 10k rows took me a few minutes. Running on the entirety of usm3 took several hours.
 
-Testing so far implies that roughly 10% of usm3 will be classified as part of a cluster
+Testing so far implies that roughly 10% of usm3 will be clustered together.
 
 
 
@@ -61,3 +61,8 @@ Once you have virtualenvwrapper set up,
 mkvirtualenv dedupe-examples
 pip install -r requirements.txt
 ```
+
+## Future Improvements:
+- Remove the 1:1 restraint from record linkage, so multiple unmatched supplier names can be matched to a single supplier
+- Add postcodes where possible and retrain the matcher accordingly.
+- Incorporate blocking from the dedupe repo to make script more suitable for running on big data.
