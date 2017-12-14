@@ -1,4 +1,4 @@
-# Description of folders and files
+## Description of folders and files
 
 ### record_linkage
 
@@ -40,15 +40,19 @@ If you want to see how this training works then removing the settings and json f
 
 
 
-## single_file_cluster -	contains scripts, settings for deduplicating (clustering) a single file (e.g. a list of unmatched suppliers)
+### single_file_cluster
+
+Contains scripts, settings for deduplicating (clustering) a single file (e.g. a list of unmatched suppliers)
 
 The deduplicator has been trained using manual inputs of roughly 40 positive and negative matches from a 10k sample of usm3.
 Running on roughly 10k rows took me a few minutes. Running on the entirety of usm3 took several hours.
 
+Testing so far implies that roughly 10% of usm3 will be classified as part of a cluster
 
 
 
-### Setup (from dedupe repo)
+
+## Setup (from dedupe repo)
 We recommend using [virtualenv](http://virtualenv.readthedocs.org/en/latest/virtualenv.html) and [virtualenvwrapper](http://virtualenvwrapper.readthedocs.org/en/latest/install.html) for working in a virtualized development environment. [Read how to set up virtualenv](http://docs.python-guide.org/en/latest/dev/virtualenvs/).
 
 Once you have virtualenvwrapper set up,
