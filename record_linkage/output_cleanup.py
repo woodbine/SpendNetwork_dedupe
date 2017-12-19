@@ -1,3 +1,11 @@
+"""
+
+Code for ordering the output csv files produced by spendnetwork_record_linkage_example.py by cluster_id.
+Helps to understand the results and see how effective the matching was.
+
+"""
+
+
 import pandas as pd
 
 csv_to_clean = "AC_data_matching_output.csv"
