@@ -1,6 +1,6 @@
 ## Description of folders and files
 
-Included here are scripts and settings/training files for dedupe. I have not included the csvs (for both the input and output) here (and have set git to ignore them) so as not to make them visible to the public.
+Included here are scripts and settings/training files for dedupe. I have not included the csvs (the inputs csvs and the results csvs) here (and have set git to ignore them) so as not to make them visible to the public.
 However I have saved all of the csvs that I used in the SpendNetwork basecamp (and will give some thoughts on the results).
 
 ### record_linkage
@@ -16,29 +16,11 @@ Currently set up to match between a csv of unmatched supplier strings from usm3 
 
 spend_network_linkage_example.py requires two csvs to run with a matching field name, and generates an output csv with the results.
 
-Csv samples (e.g. beginning "AB") can be obtained from the DB using the following SQL queries:
-
-```
-SELECT
-  supplier_name AS sss,
-  supplier_id,
-  addr_postcode
-FROM public.supplier WHERE (supplier_name LIKE 'AB%') AND (supplier_id IS NOT NULL);
-```
-and 
-
-```
-SELECT
-  sss
-FROM public.usm3
-WHERE (sss LIKE 'AB%') AND (sid IS NULL);
-```
-
 Notes:
 - The matcher has been trained by me giving manual inputs of roughly 40 positive and negative pair matches using the AB sample datasets.
 If you want to see how this training works then removing the settings and json files (or changing their paths) will commence training of a new model when spend_network_linkage_example.py is run.
 - Dedupe will only work if two field names in the two csvs are the same (currently using "sss" as supplier name).
-- I am working on another script that will make it possible to e.g. match many unmatched supplier strings from usm3 to a single supplier (i.e. not strictly 1:1).
+- I am working on another script (gazetteer) that will make it possible to e.g. match many unmatched supplier strings from usm3 to a single supplier (i.e. not strictly 1:1).
 
 
 
@@ -53,7 +35,14 @@ I did also run this on the entirety of usm3, which took several hours.
 
 Testing so far implies that roughly 10% of usm3 will be clustered together.
 
+### gazetteer
 
+This script (named "gazetteer" as this is what dedupe calls it) matches between records from different files, but without the 1:1 constraint of record_linkage.
+Set up to cluster one or more (up to five) unmatched supplier strings to a single supplier from the supplier table.
+
+(I think it can kind of be thought of like running single_file_cluster on unmatched suppliers to cluster any together before then matching to supplier names)
+
+Currently uses the same settings and training for matching as is used in result_linkage.
 
 ## Setup (from dedupe repo)
 We recommend using [virtualenv](http://virtualenv.readthedocs.org/en/latest/virtualenv.html) and [virtualenvwrapper](http://virtualenvwrapper.readthedocs.org/en/latest/install.html) for working in a virtualized development environment. [Read how to set up virtualenv](http://docs.python-guide.org/en/latest/dev/virtualenvs/).
@@ -65,8 +54,30 @@ mkvirtualenv dedupe-examples
 pip install -r requirements.txt
 ```
 
+## Getting the csvs for input:
+
+Csv samples (e.g. beginning "AB") can be obtained from the DB using the following SQL queries:
+
+```
+SELECT
+  supplier_name AS sss,
+  supplier_id,
+  addr_postcode
+FROM public.supplier WHERE (supplier_name LIKE 'AB%') AND (supplier_id IS NOT NULL);
+```
+and
+
+```
+SELECT
+  sss
+FROM public.usm3
+WHERE (sss LIKE 'AB%') AND (sid IS NULL);
+```
+I have saved the csv files I used in basecamp.
+
+
 ## Future Improvements:
-- Remove the 1:1 restraint from record linkage, so multiple unmatched supplier names can be matched to a single supplier.
+
 - Add postcodes where possible and retrain the matcher accordingly.
 - Incorporate blocking from the dedupe repo to make script more suitable for running on big data.
 - Alternate uses (tender data, with multiple fields to match)?
