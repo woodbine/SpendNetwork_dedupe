@@ -1,7 +1,9 @@
 ## Description of folders and files
 
 Included here are scripts and settings/training files for dedupe. I have not included the csvs (the inputs csvs and the results csvs) here (and have set git to ignore them) so as not to make them visible to the public.
-However I have saved all of the csvs that I used in the SpendNetwork basecamp (and will give some thoughts on the results).
+However I have saved all of the csvs that I used in the SpendNetwork basecamp.
+
+Some thoughts on the results I've found and dedupe's suitability as a whole are stored in "results_summary.md"
 
 ### record_linkage
 
