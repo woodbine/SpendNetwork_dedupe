@@ -31,7 +31,9 @@ Contains scripts, settings for deduplicating (clustering) a single file (e.g. a 
 The deduplicator has been trained using manual inputs of roughly 40 positive and negative matches from a 10k sample of usm3.
 Running on roughly 10k rows took me a few minutes.
 
-I did also run this on the entirety of usm3, which took several hours.
+I did also run this on the entirety of usm3, which took several hours. The results for that are uploaded in
+the spendnetwork database:
+classification.usm3_clusters
 
 Testing so far implies that roughly 10% of usm3 will be clustered together.
 
