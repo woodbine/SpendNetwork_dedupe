@@ -1,17 +1,14 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 """
-This code demonstrates how to use dedupe with a comma separated values
-(CSV) file. All operations are performed in memory, so will run very
-quickly on datasets up to ~10,000 rows.
+This code runs dedupe on a single csv file, to find clusters within the messy data.
 
-We start with a CSV file containing our messy data. In this example,
-it is listings of early childhood education centers in Chicago
-compiled from several different sources.
+We start with a CSV file containing our messy data (e.g. a sample of unmatched supplier strings from usm3).
 
 The output will be a CSV with our clustered results.
 
-For larger datasets, see our [mysql_example](mysql_example.html)
+Change the input data path in the setup section to run the clustering on a different file.
+Change (or delete) the settings and json files in the setup section to re-train the matcher.
 """
 from future.builtins import next
 
@@ -45,8 +42,8 @@ logging.getLogger().setLevel(log_level)
 
 # ## Setup
 
-input_file = 'usm3.csv'
-output_file = 'usm3_output.csv'
+input_file = 'usm3_10k_sample.csv'
+output_file = 'usm3_10k_sample_output.csv'
 settings_file = 'usm3_10k_learned_settings'
 training_file = 'usm3_10k_example_training.json'
 
