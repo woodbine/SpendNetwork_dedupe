@@ -1,11 +1,13 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 """
-This code demonstrates how to use RecordLink with two comma separated
-values (CSV) files. We have listings of products from two different
-online stores. The task is to link products between the datasets.
+This code uses RecordLink on two CSV files, one for unmatched suppliers for usm3, one for suppliers from the supplier table.
+The RecordLink matching only finds clusters on 1:1 level (i.e. matches a single supplier string from usm3 to a single supplier from the supplier table).
 
-The output will be a CSV with our linkded results.
+The output will be a CSV with the linked results. "Output_cleanup.py" can be used to make the results a bit more readable.
+
+Change the data paths in the setup section to run the matching between different files.
+Change (or delete) the settings and json files in the setup section to re-train the matcher.
 
 """
 from __future__ import print_function
