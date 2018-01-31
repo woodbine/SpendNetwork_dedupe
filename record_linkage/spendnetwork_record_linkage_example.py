@@ -4,6 +4,8 @@
 This code uses RecordLink on two CSV files, one for unmatched suppliers for usm3, one for suppliers from the supplier table.
 The RecordLink matching only finds clusters on 1:1 level (i.e. matches a single supplier string from usm3 to a single supplier from the supplier table).
 
+NOTE: the two files must have at least one matching field name (e.g. "sss") for this script to work
+
 The output will be a CSV with the linked results. "Output_cleanup.py" can be used to make the results a bit more readable.
 
 Change the data paths in the setup section to run the matching between different files.
