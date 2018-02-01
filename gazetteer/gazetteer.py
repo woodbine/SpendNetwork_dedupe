@@ -8,6 +8,8 @@ E.g. this code is set up to cluster one or more (currently up to 5,
 see n_matches in results variable) unmatched supplier strings
 from usm3 to a single supplier from the supplier table.
 
+Changing "n_matches" in gazetteer.match method changes the largest possible cluster size.
+
 The settings and json files used are the same as for the recordlink.
 
 """
