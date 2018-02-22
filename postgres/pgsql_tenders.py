@@ -1,8 +1,14 @@
 """
-pgsql_single_file pulls data from usm3,
-uses dedupe to find duplicates within usm3
-uploads the clusters of duplicates to table
+script for pulling tender data, deduping to find duplicates within the data, and then uploading the clusters to a (newly created) table called
+deduped_table_TENDERS
+
+NOTE: remember to specify where the deduped table is generated
+
+Currently only outputs the clustered records (i.e. doesn't show records that didn't end up in a cluster)
+relies on the "id" field being the first field read
+haven't yet put score in after it was causing some bugs
 """
+
 import dedupe
 import os
 import re
@@ -10,14 +16,13 @@ import collections
 import time
 import logging
 import optparse
+from dotenv import load_dotenv, find_dotenv
 
 import psycopg2 as psy
 import psycopg2.extras
 from unidecode import unidecode
 
-# right now: only outputs the clustered records (i.e. doesn't show records that didn't end up in the cluster)
-# NOTE: relies on the "id" field being in a specific place in order to match (see line 135)
-# haven't yet put score in after it was causing some bugs
+
 
 optp = optparse.OptionParser()
 optp.add_option('-v', '--verbose', dest='verbose', action='count',
@@ -31,26 +36,33 @@ elif opts.verbose >= 2:
     log_level = logging.DEBUG
 logging.getLogger().setLevel(log_level)
 
-settings_file = 'usm3_10k_learned_settings'
-training_file = 'usm3_10k_example_training.json'
+settings_file = 'tender_settings_BASIC'
+training_file = 'tender_training_BASIC.json'
 
 dbname = "postgres"
 user = "postgres"
 password = "postgres"
 host = "host"
 
+# get the remote database details from .env
+load_dotenv(find_dotenv())
+host_remote = os.environ.get("HOST_REMOTE")
+dbname_remote = os.environ.get("DBNAME_REMOTE")
+user_remote = os.environ.get("USER_REMOTE")
+password_remote = os.environ.get("PASSWORD_REMOTE")
+
 
 start_time = time.time()
 
-con = psy.connect(dbname=dbname, user=user, password=password)
-con2 = psy.connect(dbname=dbname, user=user, password=password)
+con = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, password=password_remote)
+# con2 = psy.connect(dbname=dbname, user=user, password=password)
 
 # con2 = psy.connect(database='database', user='user', host='host', password='password')
 
 c = con.cursor(cursor_factory=psy.extras.RealDictCursor)
 
-# test by trying to load from public.usm3
-DATA_SELECT = "SELECT id, sss FROM public.usm3 WHERE (sss LIKE 'AB%') AND (sid IS NULL)" # select id to use as record_id for deduping
+# load from the tenders view
+DATA_SELECT = "select id, title from ocds.ocds_tenders_view where countryname = 'United Kingdom' limit 500" # select id to use as record_id for deduping
 
 
 def preProcess(column):
@@ -83,8 +95,6 @@ for row in data:
 # try closing up here now
 con.close()
 
-
-
 if os.path.exists(settings_file):
     print 'reading from', settings_file
     with open(settings_file) as sf:
@@ -92,7 +102,7 @@ if os.path.exists(settings_file):
 
 else:
     fields = [
-        {'field': 'sss', 'type': 'String'}
+        {'field': 'title', 'type': 'String'}
     ]
 
     deduper = dedupe.Dedupe(fields)
@@ -125,9 +135,13 @@ clustered_dupes = deduper.match(data_d, threshold) # returns tuples
 
 print '# duplicate sets', len(clustered_dupes)
 
+# connect to ocds again to get the data and to get the columns to make the deduped table
+con2 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, password=password_remote)
 
 c2 = con2.cursor()
-c2.execute("SELECT * FROM public.usm3 WHERE (sss LIKE 'AB%') AND (sid IS NULL)")
+
+# use restricted number of columns for now, to avoid the JSON problem
+c2.execute("SELECT id, source, source_id, ocid, language, title FROM ocds.ocds_tenders_view where countryname = 'United Kingdom' limit 500")
 data = c2.fetchall() # returns a list of tuples
 
 full_data = []
@@ -138,31 +152,50 @@ for cluster_id, (cluster, score) in enumerate(clustered_dupes): # cycle through 
         for row in data: # data is a list, but isn't each row a dict? NO because data was redefined above
             # so I think this assumes that the the first value in each row from the table is an id
             # so if the row id matches the record_id from the clustered_dupes...
-            if record_id == int(row[10]): # NEED TO CHANGE THIS TO row[(whatever index matches id)]
+            if record_id == int(row[0]): # NEED TO CHANGE THIS TO row[(whatever index matches id)]
                 row = list(row) # turn the tuple into a list
                 row.insert(0, cluster_id) # put the cluster_id at the beginning of the list
                 row = tuple(row) # make it a tuple again
                 full_data.append(row) # add the new row to a new list
 
-columns = "SELECT column_name FROM information_schema.columns WHERE table_name = 'usm3'"
-c2.execute(columns)
-column_names = c2.fetchall()
-column_names = [x[0] for x in column_names]
+# FOR NOW: create manual list of column names
+column_names = ["id",
+                "source",
+                "source_id",
+                "ocid",
+                "language",
+                "title"]
+
+# columns = "SELECT column_name FROM information_schema.columns WHERE table_name = 'ocds_tenders_view'"
+# c2.execute(columns)
+# column_names = c2.fetchall()
+# column_names = [x[0] for x in column_names]
+# # for now, only use the first seven columns
+# column_names = column_names[:7]
 column_names.insert(0, 'cluster_id') # add cluster_id to the column names
 
-c2.execute('DROP TABLE IF EXISTS public.deduped_table') # get rid of the table (so we can make a new one)
-field_string = ','.join('%s varchar(500)' % name for name in column_names) # maybe improve the data types...
-c2.execute('CREATE TABLE public.deduped_table (%s)' % field_string)
-con2.commit()
+# for column_name in column_names:
+#     print column_name
+
+con2.close()
+
+# make the table for the deduped data
+con3 = psy.connect(dbname=dbname, user=user, password=password)
+c3 = con3.cursor()
+
+c3.execute('DROP TABLE IF EXISTS public.deduped_table_TENDERS') # get rid of the table (so we can make a new one)
+field_string = ','.join('%s varchar(5000)' % name for name in column_names) # maybe improve the data types...
+c3.execute('CREATE TABLE public.deduped_table_TENDERS (%s)' % field_string)
+con3.commit()
 
 #This is the input
 num_cols = len(column_names)
 mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
-args_str = ','.join(c2.mogrify(mog, x) for x in full_data) # mogrify is used to make query strings
+args_str = ','.join(c3.mogrify(mog, x) for x in full_data) # mogrify is used to make query strings
 values = "(" + ','.join(x for x in column_names) + ")"
-c2.execute("INSERT INTO deduped_table %s VALUES %s" % (values, args_str))
-con2.commit()
-con2.close()
+c3.execute("INSERT INTO deduped_table_TENDERS %s VALUES %s" % (values, args_str))
+con3.commit()
+con3.close()
 
 # con.close()
 

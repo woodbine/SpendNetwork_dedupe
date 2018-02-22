@@ -1,2 +1,4 @@
 #ignore all csv files
 *.csv
+*.env
+/postgres/pgsql_test.py

@@ -188,7 +188,7 @@ with open(output_file, 'w') as f_output, open(input_file) as f_input:
     writer.writerow(heading_row)
 
     for row in reader:
-        row_id = int(row[11])
+        row_id = int(row[11]) #NOTE: this is the index for the "id" field
         if row_id in cluster_membership:
             cluster_id = cluster_membership[row_id]["cluster id"]
             canonical_rep = cluster_membership[row_id]["canonical representation"]
