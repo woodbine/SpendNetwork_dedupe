@@ -36,9 +36,11 @@ elif opts.verbose >= 2:
     log_level = logging.DEBUG
 logging.getLogger().setLevel(log_level)
 
+# settings and training files
 settings_file = 'tender_settings_BASIC'
 training_file = 'tender_training_BASIC.json'
 
+# local database details (to use when testing)
 dbname = "postgres"
 user = "postgres"
 password = "postgres"
@@ -60,6 +62,15 @@ con = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, pass
 # con2 = psy.connect(database='database', user='user', host='host', password='password')
 
 c = con.cursor(cursor_factory=psy.extras.RealDictCursor)
+
+input_fields = ["id",
+                "title",
+                "description",
+                "value",
+                "buyer",
+                "postcode",
+                "email"
+                ]
 
 # load from the tenders view
 DATA_SELECT = "select id, title from ocds.ocds_tenders_view where countryname = 'United Kingdom' limit 500" # select id to use as record_id for deduping
@@ -180,12 +191,14 @@ column_names.insert(0, 'cluster_id') # add cluster_id to the column names
 con2.close()
 
 # make the table for the deduped data
-con3 = psy.connect(dbname=dbname, user=user, password=password)
+con3 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, password=password_remote)
+# con3 = psy.connect(dbname=dbname, user=user, password=password)
 c3 = con3.cursor()
 
-c3.execute('DROP TABLE IF EXISTS public.deduped_table_TENDERS') # get rid of the table (so we can make a new one)
+# comment out DROP statement for now...
+c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped') # get rid of the table (so we can make a new one)
 field_string = ','.join('%s varchar(5000)' % name for name in column_names) # maybe improve the data types...
-c3.execute('CREATE TABLE public.deduped_table_TENDERS (%s)' % field_string)
+c3.execute('CREATE TABLE ocds.ocds_tenders_deduped (%s)' % field_string)
 con3.commit()
 
 #This is the input
@@ -193,7 +206,7 @@ num_cols = len(column_names)
 mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
 args_str = ','.join(c3.mogrify(mog, x) for x in full_data) # mogrify is used to make query strings
 values = "(" + ','.join(x for x in column_names) + ")"
-c3.execute("INSERT INTO deduped_table_TENDERS %s VALUES %s" % (values, args_str))
+c3.execute("INSERT INTO ocds.ocds_tenders_deduped %s VALUES %s" % (values, args_str))
 con3.commit()
 con3.close()
 

@@ -10,6 +10,8 @@ import collections
 import time
 import logging
 import optparse
+from dotenv import load_dotenv, find_dotenv
+
 
 import psycopg2 as psy
 import psycopg2.extras
@@ -34,23 +36,33 @@ logging.getLogger().setLevel(log_level)
 settings_file = 'usm3_10k_learned_settings'
 training_file = 'usm3_10k_example_training.json'
 
+# local database details (to use when testing)
 dbname = "postgres"
 user = "postgres"
 password = "postgres"
 host = "host"
 
+# get the remote database details from .env
+load_dotenv(find_dotenv())
+host_remote = os.environ.get("HOST_REMOTE")
+dbname_remote = os.environ.get("DBNAME_REMOTE")
+user_remote = os.environ.get("USER_REMOTE")
+password_remote = os.environ.get("PASSWORD_REMOTE")
 
 start_time = time.time()
 
-con = psy.connect(dbname=dbname, user=user, password=password)
-con2 = psy.connect(dbname=dbname, user=user, password=password)
+con = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, password=password_remote)
+con2 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, password=password_remote)
+
+# con = psy.connect(dbname=dbname, user=user, password=password)
+# con2 = psy.connect(dbname=dbname, user=user, password=password)
 
 # con2 = psy.connect(database='database', user='user', host='host', password='password')
 
 c = con.cursor(cursor_factory=psy.extras.RealDictCursor)
 
 # test by trying to load from public.usm3
-DATA_SELECT = "SELECT id, sss FROM public.usm3 WHERE (sss LIKE 'AB%') AND (sid IS NULL)" # select id to use as record_id for deduping
+DATA_SELECT = "SELECT id, sss FROM blue.usm3 WHERE (sss LIKE 'AB%') AND (sid IS NULL)" # select id to use as record_id for deduping
 
 
 def preProcess(column):
@@ -127,7 +139,7 @@ print '# duplicate sets', len(clustered_dupes)
 
 
 c2 = con2.cursor()
-c2.execute("SELECT * FROM public.usm3 WHERE (sss LIKE 'AB%') AND (sid IS NULL)")
+c2.execute("SELECT * FROM blue.usm3 WHERE (sss LIKE 'AB%') AND (sid IS NULL)")
 data = c2.fetchall() # returns a list of tuples
 
 full_data = []
@@ -144,15 +156,16 @@ for cluster_id, (cluster, score) in enumerate(clustered_dupes): # cycle through 
                 row = tuple(row) # make it a tuple again
                 full_data.append(row) # add the new row to a new list
 
-columns = "SELECT column_name FROM information_schema.columns WHERE table_name = 'usm3'"
+columns = "SELECT column_name FROM information_schema.columns WHERE table_name = 'usm3' AND table_schema = 'blue'"
 c2.execute(columns)
 column_names = c2.fetchall()
 column_names = [x[0] for x in column_names]
 column_names.insert(0, 'cluster_id') # add cluster_id to the column names
 
-c2.execute('DROP TABLE IF EXISTS public.deduped_table') # get rid of the table (so we can make a new one)
+# Comment out the drop query for now
+c2.execute('DROP TABLE IF EXISTS blue.usm3_deduped') # get rid of the table (so we can make a new one)
 field_string = ','.join('%s varchar(500)' % name for name in column_names) # maybe improve the data types...
-c2.execute('CREATE TABLE public.deduped_table (%s)' % field_string)
+c2.execute('CREATE TABLE blue.usm3_deduped (%s)' % field_string)
 con2.commit()
 
 #This is the input
@@ -160,7 +173,7 @@ num_cols = len(column_names)
 mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
 args_str = ','.join(c2.mogrify(mog, x) for x in full_data) # mogrify is used to make query strings
 values = "(" + ','.join(x for x in column_names) + ")"
-c2.execute("INSERT INTO deduped_table %s VALUES %s" % (values, args_str))
+c2.execute("INSERT INTO blue.usm3_deduped %s VALUES %s" % (values, args_str))
 con2.commit()
 con2.close()
 
