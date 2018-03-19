@@ -1,3 +1,4 @@
+numpy
 dedupe
 Unidecode==0.4.16
 future
