@@ -37,8 +37,13 @@ elif opts.verbose >= 2:
 logging.getLogger().setLevel(log_level)
 
 # settings and training files
-settings_file = 'tender_settings_BASIC'
-training_file = 'tender_training_BASIC.json'
+settings_file = 'tender_settings_v2'
+training_file = 'tender_training_v2.json'
+
+# select the country for deduping, and the "enddate" range
+country = "United Kingdom"
+date_range_start ='2017-01-01'
+date_range_end = '2017-01-10'
 
 # local database details (to use when testing)
 dbname = "postgres"
@@ -66,14 +71,16 @@ c = con.cursor(cursor_factory=psy.extras.RealDictCursor)
 input_fields = ["id",
                 "title",
                 "description",
-                "value",
                 "buyer",
                 "postcode",
                 "email"
                 ]
 
+
+
 # load from the tenders view
-DATA_SELECT = "select id, title from ocds.ocds_tenders_view where countryname = 'United Kingdom' limit 500" # select id to use as record_id for deduping
+# select id to use as record_id for deduping
+DATA_SELECT = "select {} from ocds.ocds_tenders_view where countryname = '{}' and enddate between '{}' and '{}'".format(", ".join(input_fields), country, date_range_start, date_range_end)
 
 
 def preProcess(column):
@@ -81,13 +88,22 @@ def preProcess(column):
         column = column.decode('utf8')
     except AttributeError:
         pass
-    if not isinstance(column, int):
-        column = unidecode(column)
-        column = re.sub('  +', ' ', column)
-        column = re.sub('\n', ' ', column)
-        column = column.strip().strip('"').strip("'").lower().strip()
-        if not column:
-            column = None
+
+    # column = unidecode(column)
+    # column = re.sub('  +', ' ', column)
+    # column = re.sub('\n', ' ', column)
+    # column = column.strip().strip('"').strip("'").lower().strip()
+    if not column:
+        column = None
+    return column
+
+    # try to turn into float if possible (e.g. for price field)
+    # try:
+    #     float(column)
+    # except (ValueError, TypeError):
+    #     pass
+
+
     return column
 
 
@@ -113,7 +129,11 @@ if os.path.exists(settings_file):
 
 else:
     fields = [
-        {'field': 'title', 'type': 'String'}
+        {'field': 'title', 'type': 'String'},
+        {'field': 'description', 'type': 'Text'},
+        {'field': 'buyer', 'type': 'String'},
+        {'field': 'postcode', 'type': 'String'},
+        {'field': 'email', 'type': 'String'}
     ]
 
     deduper = dedupe.Dedupe(fields)
@@ -152,7 +172,11 @@ con2 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, pas
 c2 = con2.cursor()
 
 # use restricted number of columns for now, to avoid the JSON problem
-c2.execute("SELECT id, source, source_id, ocid, language, title FROM ocds.ocds_tenders_view where countryname = 'United Kingdom' limit 500")
+# c2.execute("SELECT id, source, source_id, ocid, language, title FROM ocds.ocds_tenders_view where countryname = 'United Kingdom' limit 500")
+
+# use the SELECT_DATA for now
+c2.execute(DATA_SELECT)
+
 data = c2.fetchall() # returns a list of tuples
 
 full_data = []
@@ -169,13 +193,19 @@ for cluster_id, (cluster, score) in enumerate(clustered_dupes): # cycle through 
                 row = tuple(row) # make it a tuple again
                 full_data.append(row) # add the new row to a new list
 
-# FOR NOW: create manual list of column names
-column_names = ["id",
-                "source",
-                "source_id",
-                "ocid",
-                "language",
-                "title"]
+# # FOR NOW: create manual list of column names
+# column_names = ["id",
+#                 "source",
+#                 "source_id",
+#                 "ocid",
+#                 "language",
+#                 "title"]
+
+# use the same output column_names as the input fields
+
+column_names = input_fields
+
+# NOTE: having problemw wuth code below because the json format is interfering with the column name retrieval for some reason...
 
 # columns = "SELECT column_name FROM information_schema.columns WHERE table_name = 'ocds_tenders_view'"
 # c2.execute(columns)
@@ -196,9 +226,9 @@ con3 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, pas
 c3 = con3.cursor()
 
 # comment out DROP statement for now...
-c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped') # get rid of the table (so we can make a new one)
-field_string = ','.join('%s varchar(5000)' % name for name in column_names) # maybe improve the data types...
-c3.execute('CREATE TABLE ocds.ocds_tenders_deduped (%s)' % field_string)
+c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped2') # get rid of the table (so we can make a new one)
+field_string = ','.join('%s varchar(500000)' % name for name in column_names) # maybe improve the data types...
+c3.execute('CREATE TABLE ocds.ocds_tenders_deduped2 (%s)' % field_string)
 con3.commit()
 
 #This is the input
@@ -206,7 +236,7 @@ num_cols = len(column_names)
 mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
 args_str = ','.join(c3.mogrify(mog, x) for x in full_data) # mogrify is used to make query strings
 values = "(" + ','.join(x for x in column_names) + ")"
-c3.execute("INSERT INTO ocds.ocds_tenders_deduped %s VALUES %s" % (values, args_str))
+c3.execute("INSERT INTO ocds.ocds_tenders_deduped2 %s VALUES %s" % (values, args_str))
 con3.commit()
 con3.close()
 
