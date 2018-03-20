@@ -37,8 +37,8 @@ elif opts.verbose >= 2:
 logging.getLogger().setLevel(log_level)
 
 # settings and training files
-settings_file = 'tender_settings_v4'
-training_file = 'tender_training_v4.json'
+settings_file = 'tender_settings_v5'
+training_file = 'tender_training_v5.json'
 
 # select the country for deduping, and the "enddate" range
 country = "United Kingdom"
@@ -70,6 +70,7 @@ c = con.cursor(cursor_factory=psy.extras.RealDictCursor)
 
 input_fields = ["id",
                 "title",
+                "value",
                 "description",
                 "buyer",
                 "postcode",
@@ -83,7 +84,8 @@ input_fields = ["id",
 DATA_SELECT = "select {} from ocds.ocds_tenders_view where countryname = '{}' and enddate between '{}' and '{}'".format(", ".join(input_fields), country, date_range_start, date_range_end)
 
 
-def preProcess(column):
+def preProcess(key, column):
+    # takes in the key, value pair from data_select, processes them for deduping later
     try:  # python 2/3 string differences
         column = column.decode('utf8')
     except AttributeError:
@@ -96,6 +98,13 @@ def preProcess(column):
             column = re.sub('  +', ' ', column)
             column = re.sub('\n', ' ', column)
             column = column.strip().strip('"').strip("'").lower().strip()
+    # if the we're looking at value, attempt to turn column into float for price deduping,
+    # if that doesn't work (because the column contains e.g. rogue characters) then set the value column to None
+    if key == 'value' and column:
+        try:
+            column = float(column)
+        except ValueError:
+            column = None
     return column
 
     # try to turn into float if possible (e.g. for price field)
@@ -116,7 +125,9 @@ data_d = {} # this is the dictionary I will use for deduping.
 
 # I think it's possible to use enumerate here but I'm going to stick with using the "id" field as keys in the dict
 for row in data:
-    clean_row = [(k, preProcess(v)) for (k, v) in row.items()]
+    # clean_row = [(k, preProcess(v)) for (k, v) in row.items()]
+    # try an alternative clean_row which doesn't preprocess the value field
+    clean_row = [(k, preProcess(k, v)) for (k, v) in row.items()]
     row_id = int(row['id'])
     data_d[row_id] = dict(clean_row)
 
@@ -131,6 +142,7 @@ if os.path.exists(settings_file):
 else:
     fields = [
         {'field': 'title', 'type': 'String'},
+        {'field': 'value', 'type': 'Price'},
         #{'field': 'description', 'type': 'Text'},
         {'field': 'buyer', 'type': 'String'},
         #{'field': 'postcode', 'type': 'String'},
@@ -227,9 +239,9 @@ con3 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, pas
 c3 = con3.cursor()
 
 # comment out DROP statement for now...
-c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped4') # get rid of the table (so we can make a new one)
+c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped5') # get rid of the table (so we can make a new one)
 field_string = ','.join('%s varchar(500000)' % name for name in column_names) # maybe improve the data types...
-c3.execute('CREATE TABLE ocds.ocds_tenders_deduped4 (%s)' % field_string)
+c3.execute('CREATE TABLE ocds.ocds_tenders_deduped5 (%s)' % field_string)
 con3.commit()
 
 #This is the input
@@ -237,7 +249,7 @@ num_cols = len(column_names)
 mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
 args_str = ','.join(c3.mogrify(mog, x) for x in full_data) # mogrify is used to make query strings
 values = "(" + ','.join(x for x in column_names) + ")"
-c3.execute("INSERT INTO ocds.ocds_tenders_deduped4 %s VALUES %s" % (values, args_str))
+c3.execute("INSERT INTO ocds.ocds_tenders_deduped5 %s VALUES %s" % (values, args_str))
 con3.commit()
 con3.close()
 
