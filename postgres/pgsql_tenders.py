@@ -37,8 +37,8 @@ elif opts.verbose >= 2:
 logging.getLogger().setLevel(log_level)
 
 # settings and training files
-settings_file = 'tender_settings_v2'
-training_file = 'tender_training_v2.json'
+settings_file = 'tender_settings_v4'
+training_file = 'tender_training_v4.json'
 
 # select the country for deduping, and the "enddate" range
 country = "United Kingdom"
@@ -88,13 +88,14 @@ def preProcess(column):
         column = column.decode('utf8')
     except AttributeError:
         pass
-
-    # column = unidecode(column)
-    # column = re.sub('  +', ' ', column)
-    # column = re.sub('\n', ' ', column)
-    # column = column.strip().strip('"').strip("'").lower().strip()
-    if not column:
-        column = None
+    if not isinstance(column, int):
+        if not column:
+            column = None
+        else:
+            column = unidecode(column)
+            column = re.sub('  +', ' ', column)
+            column = re.sub('\n', ' ', column)
+            column = column.strip().strip('"').strip("'").lower().strip()
     return column
 
     # try to turn into float if possible (e.g. for price field)
@@ -107,7 +108,7 @@ def preProcess(column):
     return column
 
 
-print 'importing data ...'
+print ('importing data ...')
 c.execute(DATA_SELECT) # returns list, each item in list being a dictionary of the corresponding row
 data = c.fetchall()# returns list, each item in list being a dictionary of the corresponding row
 data_d = {} # this is the dictionary I will use for deduping.
@@ -123,29 +124,29 @@ for row in data:
 con.close()
 
 if os.path.exists(settings_file):
-    print 'reading from', settings_file
+    print ('reading from', settings_file)
     with open(settings_file) as sf:
         deduper = dedupe.StaticDedupe(sf)
 
 else:
     fields = [
         {'field': 'title', 'type': 'String'},
-        {'field': 'description', 'type': 'Text'},
+        #{'field': 'description', 'type': 'Text'},
         {'field': 'buyer', 'type': 'String'},
-        {'field': 'postcode', 'type': 'String'},
+        #{'field': 'postcode', 'type': 'String'},
         {'field': 'email', 'type': 'String'}
     ]
 
     deduper = dedupe.Dedupe(fields)
 
-    deduper.sample(data_d, 150000)
+    deduper.sample(data_d, 75000)
 
     if os.path.exists(training_file):
-        print 'reading labeled examples from ', training_file
+        print ('reading labeled examples from ', training_file)
         with open(training_file) as tf:
             deduper.readTraining(tf)
 
-    print 'starting active labeling...'
+    print ('starting active labeling...')
 
     dedupe.consoleLabel(deduper)
 
@@ -157,14 +158,14 @@ else:
     with open(settings_file, 'w') as sf:
         deduper.writeSettings(sf)
 
-print 'blocking...'
+print ('blocking...')
 
 threshold = deduper.threshold(data_d, recall_weight=2)
 
-print 'clustering...'
+print ('clustering...')
 clustered_dupes = deduper.match(data_d, threshold) # returns tuples
 
-print '# duplicate sets', len(clustered_dupes)
+print ('# duplicate sets', len(clustered_dupes))
 
 # connect to ocds again to get the data and to get the columns to make the deduped table
 con2 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, password=password_remote)
@@ -226,9 +227,9 @@ con3 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, pas
 c3 = con3.cursor()
 
 # comment out DROP statement for now...
-c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped2') # get rid of the table (so we can make a new one)
+c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped4') # get rid of the table (so we can make a new one)
 field_string = ','.join('%s varchar(500000)' % name for name in column_names) # maybe improve the data types...
-c3.execute('CREATE TABLE ocds.ocds_tenders_deduped2 (%s)' % field_string)
+c3.execute('CREATE TABLE ocds.ocds_tenders_deduped4 (%s)' % field_string)
 con3.commit()
 
 #This is the input
@@ -236,10 +237,10 @@ num_cols = len(column_names)
 mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
 args_str = ','.join(c3.mogrify(mog, x) for x in full_data) # mogrify is used to make query strings
 values = "(" + ','.join(x for x in column_names) + ")"
-c3.execute("INSERT INTO ocds.ocds_tenders_deduped2 %s VALUES %s" % (values, args_str))
+c3.execute("INSERT INTO ocds.ocds_tenders_deduped4 %s VALUES %s" % (values, args_str))
 con3.commit()
 con3.close()
 
 # con.close()
 
-print 'ran in', time.time() - start_time, 'seconds'
+print ('ran in', time.time() - start_time, 'seconds')
