@@ -37,8 +37,8 @@ elif opts.verbose >= 2:
 logging.getLogger().setLevel(log_level)
 
 # settings and training files
-settings_file = 'tender_settings_v5'
-training_file = 'tender_training_v5.json'
+settings_file = 'tender_settings_v6'
+training_file = 'tender_training_v6.json'
 
 # select the country for deduping, and the "enddate" range
 country = "United Kingdom"
@@ -71,7 +71,7 @@ c = con.cursor(cursor_factory=psy.extras.RealDictCursor)
 input_fields = ["id",
                 "title",
                 "value",
-                "description",
+                "LEFT(description, 50) AS description",
                 "buyer",
                 "postcode",
                 "email"
@@ -85,7 +85,7 @@ DATA_SELECT = "select {} from ocds.ocds_tenders_view where countryname = '{}' an
 
 
 def preProcess(key, column):
-    # takes in the key, value pair from data_select, processes them for deduping later
+    # takes in the key, value pair from data_select - then processes them for deduping later
     try:  # python 2/3 string differences
         column = column.decode('utf8')
     except AttributeError:
@@ -143,7 +143,7 @@ else:
     fields = [
         {'field': 'title', 'type': 'String'},
         {'field': 'value', 'type': 'Price'},
-        #{'field': 'description', 'type': 'Text'},
+        {'field': 'description', 'type': 'Text'},
         {'field': 'buyer', 'type': 'String'},
         #{'field': 'postcode', 'type': 'String'},
         {'field': 'email', 'type': 'String'}
@@ -187,7 +187,7 @@ c2 = con2.cursor()
 # use restricted number of columns for now, to avoid the JSON problem
 # c2.execute("SELECT id, source, source_id, ocid, language, title FROM ocds.ocds_tenders_view where countryname = 'United Kingdom' limit 500")
 
-# use the SELECT_DATA for now
+# use the SELECT_DATA for now, get the data which will ultimately be put into the _deduped table (along with the cluster ids)
 c2.execute(DATA_SELECT)
 
 data = c2.fetchall() # returns a list of tuples
@@ -200,11 +200,12 @@ for cluster_id, (cluster, score) in enumerate(clustered_dupes): # cycle through 
         for row in data: # data is a list, but isn't each row a dict? NO because data was redefined above
             # so I think this assumes that the the first value in each row from the table is an id
             # so if the row id matches the record_id from the clustered_dupes...
-            if record_id == int(row[0]): # NEED TO CHANGE THIS TO row[(whatever index matches id)]
+            # this next section pulls the
+            if record_id == int(row[0]):
                 row = list(row) # turn the tuple into a list
                 row.insert(0, cluster_id) # put the cluster_id at the beginning of the list
                 row = tuple(row) # make it a tuple again
-                full_data.append(row) # add the new row to a new list
+                full_data.append(row) # add the new row to a new list called fulldata
 
 # # FOR NOW: create manual list of column names
 # column_names = ["id",
@@ -214,9 +215,15 @@ for cluster_id, (cluster, score) in enumerate(clustered_dupes): # cycle through 
 #                 "language",
 #                 "title"]
 
-# use the same output column_names as the input fields
+# explicitly define column names
 
-column_names = input_fields
+column_names = ["id",
+                "title",
+                "value",
+                "description",
+                "buyer",
+                "postcode",
+                "email"]
 
 # NOTE: having problemw wuth code below because the json format is interfering with the column name retrieval for some reason...
 
@@ -239,9 +246,9 @@ con3 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, pas
 c3 = con3.cursor()
 
 # comment out DROP statement for now...
-c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped5') # get rid of the table (so we can make a new one)
+c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped6') # get rid of the table (so we can make a new one)
 field_string = ','.join('%s varchar(500000)' % name for name in column_names) # maybe improve the data types...
-c3.execute('CREATE TABLE ocds.ocds_tenders_deduped5 (%s)' % field_string)
+c3.execute('CREATE TABLE ocds.ocds_tenders_deduped6 (%s)' % field_string)
 con3.commit()
 
 #This is the input
@@ -249,7 +256,7 @@ num_cols = len(column_names)
 mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
 args_str = ','.join(c3.mogrify(mog, x) for x in full_data) # mogrify is used to make query strings
 values = "(" + ','.join(x for x in column_names) + ")"
-c3.execute("INSERT INTO ocds.ocds_tenders_deduped5 %s VALUES %s" % (values, args_str))
+c3.execute("INSERT INTO ocds.ocds_tenders_deduped6 %s VALUES %s" % (values, args_str))
 con3.commit()
 con3.close()
 
