@@ -1,12 +1,15 @@
 """
-script for pulling tender data, deduping to find duplicates within the data, and then uploading the clusters to a (newly created) table called
-deduped_table_TENDERS
+script for deduping tender data.
 
-NOTE: remember to specify where the deduped table is generated
+Works as follows
 
-Currently only outputs the clustered records (i.e. doesn't show records that didn't end up in a cluster)
+1) Pulls data from the tenders table/view
+2) Looks for training data/settings, if none found then asks for training data and trains model
+3) Dedupes the data using that model/settings
+4) Uploads deduped table to database
+
+Only outputs the clustered records (i.e. doesn't show records that didn't end up in a cluster)
 relies on the "id" field being the first field read
-haven't yet put score in after it was causing some bugs
 """
 
 import dedupe
@@ -23,7 +26,7 @@ import psycopg2.extras
 from unidecode import unidecode
 
 
-
+# parser for debugging
 optp = optparse.OptionParser()
 optp.add_option('-v', '--verbose', dest='verbose', action='count',
                 help='Increase verbosity (specify multiple times for more)'
@@ -61,13 +64,11 @@ password_remote = os.environ.get("PASSWORD_REMOTE")
 
 start_time = time.time()
 
+# connect to remote database
 con = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, password=password_remote)
-# con2 = psy.connect(dbname=dbname, user=user, password=password)
-
-# con2 = psy.connect(database='database', user='user', host='host', password='password')
-
 c = con.cursor(cursor_factory=psy.extras.RealDictCursor)
 
+# specify fields to pull from the tenders table (make sure to pull all the fields you need for deduping later)
 input_fields = ["id",
                 "title",
                 "value",
@@ -79,8 +80,7 @@ input_fields = ["id",
 
 
 
-# load from the tenders view
-# select id to use as record_id for deduping
+# create query for pulling the tender data
 DATA_SELECT = "select {} from ocds.ocds_tenders_view where countryname = '{}' and enddate between '{}' and '{}'".format(", ".join(input_fields), country, date_range_start, date_range_end)
 
 
@@ -94,6 +94,7 @@ def preProcess(key, column):
         if not column:
             column = None
         else:
+            # get rid of spaces/newlines
             column = unidecode(column)
             column = re.sub('  +', ' ', column)
             column = re.sub('\n', ' ', column)
@@ -107,39 +108,32 @@ def preProcess(key, column):
             column = None
     return column
 
-    # try to turn into float if possible (e.g. for price field)
-    # try:
-    #     float(column)
-    # except (ValueError, TypeError):
-    #     pass
 
-
-    return column
-
-
+# start importing the tender data
 print ('importing data ...')
-c.execute(DATA_SELECT) # returns list, each item in list being a dictionary of the corresponding row
-data = c.fetchall()# returns list, each item in list being a dictionary of the corresponding row
+c.execute(DATA_SELECT)
+data = c.fetchall()# returns list, each item in list being a dictionary of the corresponding row returned from DATA_SELECT query
 data_d = {} # this is the dictionary I will use for deduping.
-# the keys will be record_ids and the values will be dictionaries with the keys being field names
+# data_d is actually a dictionary of dictionaries. The keys are ids, with the values being another dictionary (containing fields and values)
 
-# I think it's possible to use enumerate here but I'm going to stick with using the "id" field as keys in the dict
 for row in data:
-    # clean_row = [(k, preProcess(v)) for (k, v) in row.items()]
-    # try an alternative clean_row which doesn't preprocess the value field
+    # clean each row in data using the preprocess function
     clean_row = [(k, preProcess(k, v)) for (k, v) in row.items()]
     row_id = int(row['id'])
     data_d[row_id] = dict(clean_row)
 
-# try closing up here now
+# close connection
 con.close()
 
+# check if settings_file exists and if it does then read the dedupe settings
 if os.path.exists(settings_file):
     print ('reading from', settings_file)
     with open(settings_file) as sf:
         deduper = dedupe.StaticDedupe(sf)
 
+# otherwise, time to train a new dedupe model
 else:
+    # specify the fields for deduping
     fields = [
         {'field': 'title', 'type': 'String'},
         {'field': 'value', 'type': 'Price'},
@@ -153,17 +147,20 @@ else:
 
     deduper.sample(data_d, 75000)
 
+    # check if a training file exists. If it does load it.
     if os.path.exists(training_file):
         print ('reading labeled examples from ', training_file)
         with open(training_file) as tf:
             deduper.readTraining(tf)
 
+    # active labelling phase
     print ('starting active labeling...')
-
     dedupe.consoleLabel(deduper)
 
+    # train the deduper using the training data (this part is the most time consuming I think)
     deduper.train()
 
+    # save out training and settings files
     with open(training_file, 'w') as tf:
         deduper.writeTraining(tf)
 
@@ -171,17 +168,17 @@ else:
         deduper.writeSettings(sf)
 
 print ('blocking...')
-
 threshold = deduper.threshold(data_d, recall_weight=2)
 
 print ('clustering...')
 clustered_dupes = deduper.match(data_d, threshold) # returns tuples
 
+# return number of duplicated sets
 print ('# duplicate sets', len(clustered_dupes))
 
+# BEGIN CONSTRUCTING THE TABLE TO STORE THE DEDUPED DATA
 # connect to ocds again to get the data and to get the columns to make the deduped table
 con2 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, password=password_remote)
-
 c2 = con2.cursor()
 
 # use restricted number of columns for now, to avoid the JSON problem
@@ -189,10 +186,9 @@ c2 = con2.cursor()
 
 # use the SELECT_DATA for now, get the data which will ultimately be put into the _deduped table (along with the cluster ids)
 c2.execute(DATA_SELECT)
-
 data = c2.fetchall() # returns a list of tuples
 
-full_data = []
+full_data = [] # list to be insterted into the deduped table
 
 cluster_membership = collections.defaultdict(lambda: 'x') # This variable doesn't seem to be used anywhere else?
 for cluster_id, (cluster, score) in enumerate(clustered_dupes): # cycle through the clustered dupes
@@ -207,17 +203,10 @@ for cluster_id, (cluster, score) in enumerate(clustered_dupes): # cycle through 
                 row = tuple(row) # make it a tuple again
                 full_data.append(row) # add the new row to a new list called fulldata
 
-# # FOR NOW: create manual list of column names
-# column_names = ["id",
-#                 "source",
-#                 "source_id",
-#                 "ocid",
-#                 "language",
-#                 "title"]
-
-# explicitly define column names
-
+# specify column names to have in the deduped table, for now use same ones as the input fields
 column_names = input_fields
+# add the startdate and enddate fields
+column_names += ["startdate", "enddate"]
 
 # NOTE: having problemw wuth code below because the json format is interfering with the column name retrieval for some reason...
 
@@ -229,23 +218,20 @@ column_names = input_fields
 # column_names = column_names[:7]
 column_names.insert(0, 'cluster_id') # add cluster_id to the column names
 
-# for column_name in column_names:
-#     print column_name
-
+# close con2
 con2.close()
 
-# make the table for the deduped data
+# new connection to make the table for the deduped data
 con3 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, password=password_remote)
-# con3 = psy.connect(dbname=dbname, user=user, password=password)
 c3 = con3.cursor()
 
-# comment out DROP statement for now...
+# create the dedupe table
 c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped7') # get rid of the table (so we can make a new one)
-field_string = ','.join('%s varchar(500000)' % name for name in column_names) # maybe improve the data types...
+field_string = ','.join('%s varchar(500000)' % name for name in column_names)
 c3.execute('CREATE TABLE ocds.ocds_tenders_deduped7 (%s)' % field_string)
 con3.commit()
 
-#This is the input
+# Input the data into the dedupe table
 num_cols = len(column_names)
 mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
 args_str = ','.join(c3.mogrify(mog, x) for x in full_data) # mogrify is used to make query strings
@@ -253,7 +239,5 @@ values = "(" + ','.join(x for x in column_names) + ")"
 c3.execute("INSERT INTO ocds.ocds_tenders_deduped7 %s VALUES %s" % (values, args_str))
 con3.commit()
 con3.close()
-
-# con.close()
 
 print ('ran in', time.time() - start_time, 'seconds')
