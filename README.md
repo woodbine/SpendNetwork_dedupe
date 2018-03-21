@@ -13,7 +13,7 @@
 
 This folder contains three scripts. All of them take in data from postgres database, dedupe that data, then output the deduped data to a table
 
-- pgsql_single_file: for deduping a single table (currently set up to dedupe usm3)
+- pgsql_single_file: for deduping a single table (currently set up to dedupe usm3) - takes data from a single table and outputs to a single table the rows arranged by cluster id (basically identified as a duplicate).
 
 - pgsql_record_linkage: for dedupe matching between two data scources (currently set up to match between usm3 and suppliers tables)
 
@@ -21,12 +21,13 @@ This folder contains three scripts. All of them take in data from postgres datab
 
 Possible improvements:
 - more training data to improve the models
-    - for usm3/suppliers this means trying to get the existing training data in the correct format
+    - for usm3/suppliers this means trying to get the existing training data in the correct format - possibly commission someone to write a script to output to the dedupe.io format for learning data, or look at dedupe.io output function for learning data.
+
     - for tenders this means having someone manually verify more samples
 
-- loop over new data and add the newly deduped data to a table
+- loop over new data and add the newly deduped data to a table - flagging of duplicates as duplicates.
 
-- improve some of the comparators, e.g. use corpus for the description field in tenders.
+- improve some of the comparators, e.g. use corpus for the description field in tenders - experiment with using more common words / value of specific words.
 
 - add postcodes to the supplier/usm3 matching
 
