@@ -40,8 +40,8 @@ elif opts.verbose >= 2:
 logging.getLogger().setLevel(log_level)
 
 # settings and training files
-settings_file = 'tender_settings_v7'
-training_file = 'tender_training_v7.json'
+settings_file = 'tender_settings_v7' # describes the model
+training_file = 'tender_training_v7.json' # defines existing duplicates
 
 # select the country for deduping, and the "enddate" range
 country = "United Kingdom"
@@ -145,7 +145,7 @@ else:
 
     deduper = dedupe.Dedupe(fields)
 
-    deduper.sample(data_d, 75000)
+    deduper.sample(data_d, 75000) # max number of samples to be used in machine learning.
 
     # check if a training file exists. If it does load it.
     if os.path.exists(training_file):
@@ -209,14 +209,6 @@ for cluster_id, (cluster, score) in enumerate(clustered_dupes): # cycle through 
 # specify column names to have in the deduped table, for now use same ones as the input fields
 column_names = input_fields
 
-# NOTE: having problemw wuth code below because the json format is interfering with the column name retrieval for some reason...
-
-# columns = "SELECT column_name FROM information_schema.columns WHERE table_name = 'ocds_tenders_view'"
-# c2.execute(columns)
-# column_names = c2.fetchall()
-# column_names = [x[0] for x in column_names]
-# # for now, only use the first seven columns
-# column_names = column_names[:7]
 column_names.insert(0, 'cluster_id') # add cluster_id to the column names
 
 # close con2
