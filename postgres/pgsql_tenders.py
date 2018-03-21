@@ -37,8 +37,8 @@ elif opts.verbose >= 2:
 logging.getLogger().setLevel(log_level)
 
 # settings and training files
-settings_file = 'tender_settings_v6'
-training_file = 'tender_training_v6.json'
+settings_file = 'tender_settings_v7'
+training_file = 'tender_training_v7.json'
 
 # select the country for deduping, and the "enddate" range
 country = "United Kingdom"
@@ -71,7 +71,7 @@ c = con.cursor(cursor_factory=psy.extras.RealDictCursor)
 input_fields = ["id",
                 "title",
                 "value",
-                "LEFT(description, 50) AS description",
+                "description",
                 "buyer",
                 "postcode",
                 "email"
@@ -145,7 +145,7 @@ else:
         {'field': 'value', 'type': 'Price'},
         {'field': 'description', 'type': 'Text'},
         {'field': 'buyer', 'type': 'String'},
-        #{'field': 'postcode', 'type': 'String'},
+        {'field': 'postcode', 'type': 'String'},
         {'field': 'email', 'type': 'String'}
     ]
 
@@ -217,13 +217,7 @@ for cluster_id, (cluster, score) in enumerate(clustered_dupes): # cycle through 
 
 # explicitly define column names
 
-column_names = ["id",
-                "title",
-                "value",
-                "description",
-                "buyer",
-                "postcode",
-                "email"]
+column_names = input_fields
 
 # NOTE: having problemw wuth code below because the json format is interfering with the column name retrieval for some reason...
 
@@ -246,9 +240,9 @@ con3 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, pas
 c3 = con3.cursor()
 
 # comment out DROP statement for now...
-c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped6') # get rid of the table (so we can make a new one)
+c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped7') # get rid of the table (so we can make a new one)
 field_string = ','.join('%s varchar(500000)' % name for name in column_names) # maybe improve the data types...
-c3.execute('CREATE TABLE ocds.ocds_tenders_deduped6 (%s)' % field_string)
+c3.execute('CREATE TABLE ocds.ocds_tenders_deduped7 (%s)' % field_string)
 con3.commit()
 
 #This is the input
@@ -256,7 +250,7 @@ num_cols = len(column_names)
 mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
 args_str = ','.join(c3.mogrify(mog, x) for x in full_data) # mogrify is used to make query strings
 values = "(" + ','.join(x for x in column_names) + ")"
-c3.execute("INSERT INTO ocds.ocds_tenders_deduped6 %s VALUES %s" % (values, args_str))
+c3.execute("INSERT INTO ocds.ocds_tenders_deduped7 %s VALUES %s" % (values, args_str))
 con3.commit()
 con3.close()
 
