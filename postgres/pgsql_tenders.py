@@ -185,10 +185,13 @@ c2 = con2.cursor()
 # c2.execute("SELECT id, source, source_id, ocid, language, title FROM ocds.ocds_tenders_view where countryname = 'United Kingdom' limit 500")
 
 # use the SELECT_DATA for now, get the data which will ultimately be put into the _deduped table (along with the cluster ids)
-c2.execute(DATA_SELECT)
+input_fields += ["startdate", "enddate"]
+DATA_SELECT2 = "select {} from ocds.ocds_tenders_view where countryname = '{}' and enddate between '{}' and '{}'".format(", ".join(input_fields), country, date_range_start, date_range_end)
+
+c2.execute(DATA_SELECT2)
 data = c2.fetchall() # returns a list of tuples
 
-full_data = [] # list to be insterted into the deduped table
+full_data = [] # list to be inserted into the deduped table
 
 cluster_membership = collections.defaultdict(lambda: 'x') # This variable doesn't seem to be used anywhere else?
 for cluster_id, (cluster, score) in enumerate(clustered_dupes): # cycle through the clustered dupes
@@ -205,8 +208,6 @@ for cluster_id, (cluster, score) in enumerate(clustered_dupes): # cycle through 
 
 # specify column names to have in the deduped table, for now use same ones as the input fields
 column_names = input_fields
-# add the startdate and enddate fields
-column_names += ["startdate", "enddate"]
 
 # NOTE: having problemw wuth code below because the json format is interfering with the column name retrieval for some reason...
 
@@ -226,9 +227,9 @@ con3 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, pas
 c3 = con3.cursor()
 
 # create the dedupe table
-c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped7') # get rid of the table (so we can make a new one)
+c3.execute('DROP TABLE IF EXISTS ocds.ocds_tenders_deduped8') # get rid of the table (so we can make a new one)
 field_string = ','.join('%s varchar(500000)' % name for name in column_names)
-c3.execute('CREATE TABLE ocds.ocds_tenders_deduped7 (%s)' % field_string)
+c3.execute('CREATE TABLE ocds.ocds_tenders_deduped8 (%s)' % field_string)
 con3.commit()
 
 # Input the data into the dedupe table
@@ -236,7 +237,7 @@ num_cols = len(column_names)
 mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
 args_str = ','.join(c3.mogrify(mog, x) for x in full_data) # mogrify is used to make query strings
 values = "(" + ','.join(x for x in column_names) + ")"
-c3.execute("INSERT INTO ocds.ocds_tenders_deduped7 %s VALUES %s" % (values, args_str))
+c3.execute("INSERT INTO ocds.ocds_tenders_deduped8 %s VALUES %s" % (values, args_str))
 con3.commit()
 con3.close()
 
