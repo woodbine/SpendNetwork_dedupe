@@ -1,3 +1,37 @@
+## UPDATE 14/03/2018
+
+### SETUP
+
+- install the requirements
+- create a .env file in the root folder with
+    - "HOST_REMOTE"
+    - "DBNAME_REMOTE"
+    - "USER_REMOTE"
+    - "PASSWORD_REMOTE"
+
+### postgres folder
+
+This folder contains three scripts. All of them take in data from postgres database, dedupe that data, then output the deduped data to a table
+
+- pgsql_single_file: for deduping a single table (currently set up to dedupe usm3)
+
+- pgsql_record_linkage: for dedupe matching between two data scources (currently set up to match between usm3 and suppliers tables)
+
+- pgsql_tenders: for deduping the tenders
+
+Possible improvements:
+- more training data to improve the models
+    - for usm3/suppliers this means trying to get the existing training data in the correct format
+    - for tenders this means having someone manually verify more samples
+
+- loop over new data and add the newly deduped data to a table
+
+- improve some of the comparators, e.g. use corpus for the description field in tenders.
+
+- add postcodes to the supplier/usm3 matching
+
+
+
 ## Description of folders and files
 
 Included here are scripts and settings/training files for dedupe. I have not included the csvs (the inputs csvs and the results csvs) here (and have set git to ignore them) so as not to make them visible to the public.
