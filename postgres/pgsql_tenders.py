@@ -27,8 +27,8 @@ from unidecode import unidecode
 
 
 # settings and training files
-settings_file = 'tender_settings_v7'
-training_file = 'tender_training_v7.json'
+settings_file = 'tender_settings_new_structure'
+training_file = 'tender_training_new_structure.json'
 
 # select the country for deduping, and the "enddate" range
 search_source = "ocds.ocds_tenders_view"
@@ -165,16 +165,16 @@ def collect_labelled_data(data_d):
     print ('starting active labeling...')
     dedupe.consoleLabel(deduper)
 
+    # train the deduper
+    print("training deduper...")
+    deduper.train()
+
     # save out the training data
     print ("saving out training file...")
     with open(training_file, 'w') as tf:
         deduper.writeTraining(tf)
 
-    # train the deduper
-    print("training deduper...")
-    deduper.train()
-
-    # save oout the settings
+    # save out the settings
     print ("saving out settings file...")
     with open(settings_file, 'w') as sf:
         deduper.writeSettings(sf)
@@ -247,7 +247,7 @@ def add_data_to_table(table_name, query, column_names, clustered_dupes):
     mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
     args_str = ','.join(c3.mogrify(mog, x) for x in full_data)  # mogrify is used to make query strings
     values = "(" + ','.join(x for x in column_names) + ")"
-    c3.execute("INSERT INTO ocds.ocds_tenders_deduped_NEW %s VALUES %s" % (values, args_str))
+    c3.execute("INSERT INTO ocds.{} {} VALUES {}".format(table_name, values, args_str))
     con3.commit()
     con3.close()
 
