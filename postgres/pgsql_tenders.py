@@ -16,7 +16,7 @@ IF settings file exists:
 IF settings file doesn't exist:
 
 1) pulls data from database to use to train a new deduping model
-2) uses user input
+2) uses user-inputted training data to train and save a new deduping model (i.e. a new settings file)
 
 Only outputs the clustered records (i.e. doesn't show records that didn't end up in a cluster)
 relies on the "id" field being the first field read
