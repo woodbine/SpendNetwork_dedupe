@@ -251,6 +251,8 @@ def add_data_to_table(table_name, query, column_names, clustered_dupes):
     con3.commit()
     con3.close()
 
+    return
+
 
 #
 #
