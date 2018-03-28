@@ -293,14 +293,14 @@ if __name__ == '__main__':
             select_query = construct_query(input_fields, select_source, date_range, select_country)
 
             # get data from the database using the query
-            select_data = fetch_data(select_query)
+            selected_data = fetch_data(select_query)
 
             # clean the data
-            cleaned_data = clean_data(select_data)
+            cleaned_data = clean_data(selected_data)
 
             # proceed to deduping:
             clusters = custom_dedupe(deduper, cleaned_data)
-    
+
             # add the results to the table
             # make query to get the rest of the data we want in the table
             output_query = construct_query(output_fields[1:], select_source, date_range, select_country)
