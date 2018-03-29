@@ -44,8 +44,8 @@ from unidecode import unidecode
 
 # settings and training files
 # if settings file does not exist then new model will be trained
-settings_file = 'tender_settings_w_enddate'
-training_file = 'tender_training_w_enddate.json'
+tender_settings_file = 'tender_settings_w_enddate'
+tender_training_file = 'tender_training_w_enddate.json'
 
 # select where to get the data for deduping from, the country for deduping, and the releasedate ranges
 data_source = "ocds.ocds_tenders_view"
@@ -177,7 +177,7 @@ def clean_data(data):
 
     return data_d
 
-def collect_labelled_data(data_d, fields):
+def collect_labelled_data(data_d, fields, training_file, settings_file):
     """collects labelled data, returns the deduper"""
 
     deduper = dedupe.Dedupe(fields)
@@ -289,10 +289,10 @@ if __name__ == '__main__':
     debugger_setup()
 
     # if settings file exists
-    if os.path.exists(settings_file):
+    if os.path.exists(tender_settings_file):
         # load from settings file
-        print ('reading from', settings_file)
-        with open(settings_file) as sf:
+        print ('reading from', tender_settings_file)
+        with open(tender_settings_file) as sf:
             deduper = dedupe.StaticDedupe(sf)
 
         # construct results table
@@ -332,7 +332,7 @@ if __name__ == '__main__':
         cleaned_training_data = clean_data(training_data)
 
         # get labelled training examples and train a new model
-        collect_labelled_data(cleaned_training_data, tender_fields)
+        collect_labelled_data(cleaned_training_data, tender_fields, tender_training_file, tender_settings_file)
         print("training complete. Run script again to begin deduping with the newly trained model")
 
 
