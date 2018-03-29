@@ -23,6 +23,7 @@ relies on the "id" field being the first field read
 """
 
 import dedupe
+import datetime
 import os
 import re
 import collections
@@ -38,11 +39,11 @@ from unidecode import unidecode
 
 # settings and training files
 # if settings file does not exist then new model will be trained
-settings_file = 'tender_settings_new_structure'
-training_file = 'tender_training_new_structure.json'
+settings_file = 'tender_settings_w_enddate'
+training_file = 'tender_training_w_enddate.json'
 
-# select where to get the data for deduping from, the country for deduping, and the "enddate" ranges
-select_source = "ocds.ocds_tenders_view"
+# select where to get the data for deduping from, the country for deduping, and the releasedate ranges
+data_source = "ocds.ocds_tenders_view"
 select_country = "United Kingdom"
 select_date_ranges = [['2017-01-01', '2017-01-10'],
                       ['2017-01-11', '2017-01-21']]
@@ -54,19 +55,31 @@ input_fields = ["id",
                 "description",
                 "buyer",
                 "postcode",
-                "email"
+                "email",
+                "enddate"
                 ]
 
 # column names that you want in the results table (make sure to have the cluster_id field first)
-output_fields = ["cluster_id"] + input_fields + ["startdate", "enddate"]
+output_fields = ["cluster_id"] + input_fields + ["startdate", "releasedate", "source"]
 
 # name of results table
-results_table = "ocds_tenders_deduped_new"
+results_table = "ocds_tenders_deduped_enddate_test"
 
 # settings for pulling data to train the deduper
-training_source = select_source
+training_source = data_source
 training_country = select_country
 training_date_range = ['2017-01-01', '2017-01-10']
+
+# dedupe training fields
+tender_fields = [
+        {'field': 'title', 'type': 'String'},
+        {'field': 'value', 'type': 'Price'},
+        #{'field': 'description', 'type': 'Text'},
+        {'field': 'buyer', 'type': 'String'},
+        {'field': 'postcode', 'type': 'String'},
+        {'field': 'email', 'type': 'String'},
+        {'field': 'enddate', 'type': 'DateTime', 'dayfirst': True}
+    ]
 
 # local database details (to use when testing)
 dbname = "postgres"
@@ -98,16 +111,16 @@ def debugger_setup():
 def construct_query(fields, source, date_range, country):
     """create query for pulling data from db"""
 
-    query = "select {} from {} where countryname = '{}' and enddate between '{}' and '{}'".format(", ".join(fields), source, country, date_range[0], date_range[1])
+    query = "select {} from {} where countryname = '{}' and releasedate between '{}' and '{}'".format(", ".join(fields), source, country, date_range[0], date_range[1])
     return query
 
 def preProcess(key, column):
-    """takes in the key, value pair from data_select - then processes them for deduping later"""
+    # takes in the key, value pair from data_select - then processes them for deduping later
     try:  # python 2/3 string differences
         column = column.decode('utf8')
     except AttributeError:
         pass
-    if not isinstance(column, int):
+    if not isinstance(column, int) and not isinstance(column, datetime.datetime):
         if not column:
             column = None
         else:
@@ -118,6 +131,9 @@ def preProcess(key, column):
             column = column.strip().strip('"').strip("'").lower().strip()
     # if the we're looking at value, attempt to turn column into float for price deduping,
     # if that doesn't work (because the column contains e.g. rogue characters) then set the value column to None
+    if isinstance(column, datetime.datetime) and column:
+        # convert datetime object to string to work better with deduper
+        column = column.strftime('%d/%m/%Y')
     if key == 'value' and column:
         try:
             column = float(column)
@@ -137,6 +153,7 @@ def fetch_data(query):
     data = c.fetchall() # returns list, each item in list being a dictionary of the corresponding row returned from query
 
     con.close()
+    print("imported {} rows...".format(str(len(data))))
 
     return data
 
@@ -155,16 +172,8 @@ def clean_data(data):
 
     return data_d
 
-def collect_labelled_data(data_d):
+def collect_labelled_data(data_d, fields):
     """collects labelled data, returns the deduper"""
-    fields = [
-        {'field': 'title', 'type': 'String'},
-        {'field': 'value', 'type': 'Price'},
-        #{'field': 'description', 'type': 'Text'},
-        {'field': 'buyer', 'type': 'String'},
-        {'field': 'postcode', 'type': 'String'},
-        {'field': 'email', 'type': 'String'}
-    ]
 
     deduper = dedupe.Dedupe(fields)
 
@@ -290,7 +299,7 @@ if __name__ == '__main__':
         for date_range in select_date_ranges:
 
             # construct the query for getting data to be deduped
-            select_query = construct_query(input_fields, select_source, date_range, select_country)
+            select_query = construct_query(input_fields, data_source, date_range, select_country)
 
             # get data from the database using the query
             selected_data = fetch_data(select_query)
@@ -303,7 +312,7 @@ if __name__ == '__main__':
 
             # add the results to the table
             # make query to get the rest of the data we want in the table
-            output_query = construct_query(output_fields[1:], select_source, date_range, select_country)
+            output_query = construct_query(output_fields[1:], data_source, date_range, select_country)
             add_data_to_table(results_table, output_query, output_fields, clusters, clusters_index_start=current_index)
 
             # update the index for clusters_id (for the next set of clusters to be added to the results table)
@@ -311,13 +320,14 @@ if __name__ == '__main__':
 
     # if the settings file doesn't exist, this means we need to train a new deduping model
     else:
+        print("no settings file found. Importing data for training...")
         # import data for training
         select_query = construct_query(input_fields, training_source, training_date_range, training_country)
         training_data = fetch_data(select_query)
         cleaned_training_data = clean_data(training_data)
 
         # get labelled training examples and train a new model
-        collect_labelled_data(cleaned_training_data)
+        collect_labelled_data(cleaned_training_data, tender_fields)
         print("training complete. Run script again to begin deduping with the newly trained model")
 
 
