@@ -20,6 +20,11 @@ IF settings file doesn't exist:
 
 Only outputs the clustered records (i.e. doesn't show records that didn't end up in a cluster)
 relies on the "id" field being the first field read
+
+NOTE: the description comparator is currently disabled. When enabled the training takes a lot longer to run.
+For expedience when testing, it is probably best to leave it disabled. When using for real it is better to enable it.
+
+Enable it by uncommenting the description row in the "tender_fields" variable.
 """
 
 import dedupe
