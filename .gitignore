@@ -1,3 +1,5 @@
 #ignore all csv files
 *.csv
-.idea
+*.env
+/postgres/pgsql_test.py
+.idea/workspace.xml
