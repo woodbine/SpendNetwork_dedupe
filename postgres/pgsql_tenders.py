@@ -10,8 +10,9 @@ IF settings file exists:
 1) loads deduper from settings file.
 2) creates a table for storing dedupe results (and overwrites table if it already exists)
 3) pulls data to be deduped from database.
-2) dedupes data using the loaded settings.
-3) Adds the deduped data to table.
+4) dedupes data using the loaded settings.
+5) Adds the deduped data to table.
+6) loops over steps 3)-5)
 
 IF settings file doesn't exist:
 
