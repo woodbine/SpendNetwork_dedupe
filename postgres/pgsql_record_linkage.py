@@ -6,6 +6,7 @@ uploads the matches (clusters) to table
 """
 
 import dedupe
+import sys
 import os
 import re
 import collections
@@ -33,6 +34,11 @@ logging.getLogger().setLevel(log_level)
 # settings and training files
 settings_file = 'data_matching_learned_settings'
 training_file = 'data_matching_training.json'
+
+table_name = "usm3_suppliers_matched"
+table_schema = "blue"
+
+column_names = ["cluster_id", "id", "sss", "rid", "supplier_name"]
 
 # select alphabetic segment of table you want to dedupe
 alphabetic_filter = "AB%"
@@ -134,34 +140,65 @@ clustered_dupes = linker.match(data_list[0], data_list[1], threshold=0.5)
 
 print '# duplicate sets', len(clustered_dupes)
 
+print clustered_dupes
+
+
+### for data source 0 (usm3), get the stuff to
+
+SELECT_DATA_0 = "SELECT id, sss FROM blue.usm3 WHERE (sss LIKE '{}') AND (sid IS NULL)".format(alphabetic_filter)
+SELECT_DATA_1 = "SELECT rid AS id, supplier_name AS sss FROM blue.supplier WHERE (supplier_name LIKE '{}') AND (supplier_id IS NOT NULL) AND (rid IS NOT NULL)".format(alphabetic_filter)
+
+
+
+con2 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, password=password_remote)
 
 # Select all the rows for some reason
 c2 = con2.cursor()
-c2.execute('SELECT * FROM csv_messy_data')
-data = c2.fetchall()
+c2.execute(SELECT_DATA_0)
+data0 = c2.fetchall()
+
+c2.execute(SELECT_DATA_1)
+data1 = c2.fetchall()
 
 full_data = []
 
+print data0
+print data1
+
 cluster_membership = collections.defaultdict(lambda : 'x') #?
 for cluster_id, (cluster, score) in enumerate(clustered_dupes):
-    for record_id in cluster:
-        for row in data:
-            if record_id == int(row[0]):
-                row = list(row)
-                row.insert(0,cluster_id)
-                row = tuple(row)
-                full_data.append(row)
+    for datasource, record_id in enumerate(cluster):
+        # treat the two separate record ids differently - i.e. use different data for next step from the different queries
+        if datasource == 0:
+            # if the id we're looking at is for usm3
+            for row in data0:
+                if record_id == int(row[0]):
+                    row = list(row)
+                    row.insert(0,cluster_id)
+                    # add two blank rows on the end to cover rid and supplier name
+                    row = row + [None, None]
+                    row = tuple(row)
+                    full_data.append(row)
+        if datasource == 1:
+            # if the id we're looking at is for suppliers table
+            for row in data1:
+                if record_id == int(row[0]):
+                    row = list(row)
+                    row.insert(0,cluster_id)
+                    # add two blanks to cover id and sss
+                    row.insert(1, None)
+                    row.insert(1, None)
+                    row = tuple(row)
+                    full_data.append(row)
 
-columns = "SELECT column_name FROM public.columns WHERE table_name = 'deduped_table'"
-c2.execute(columns) # as part of the same session, find the column_names
-column_names = c2.fetchall()
-column_names = [x[0] for x in column_names]
-column_names.insert(0,'cluster_id')
 
-c2.execute('DROP TABLE IF EXISTS deduped_table')
-field_string = ','.join('%s varchar(200)' % name for name in column_names)
-c2.execute('CREATE TABLE deduped_table (%s)' % field_string)
+# create the results table
+print ('creating results table {}...'.format(table_name))
+c2.execute('DROP TABLE IF EXISTS {}.{}'.format(table_schema, table_name))  # get rid of the table (so we can make a new one)
+field_string = ','.join('%s varchar(500000)' % name for name in column_names)
+c2.execute('CREATE TABLE {}.{} ({})'.format(table_schema, table_name, field_string))
 con2.commit()
+
 
 num_cols = len(column_names)
 
@@ -170,9 +207,8 @@ num_cols = len(column_names)
 mog = "(" + ("%s,"*(num_cols -1)) + "%s)"
 args_str = ','.join(c2.mogrify(mog,x) for x in full_data) # This is the actual data that goes in the table
 values = "("+ ','.join(x for x in column_names) +")"
-c2.execute("INSERT INTO deduped_table %s VALUES %s" % (values, args_str))
+c2.execute("INSERT INTO {}.{} {} VALUES {}".format(table_schema, table_name, values, args_str))
 con2.commit()
 con2.close()
-con.close()
 
 print 'ran in', time.time() - start_time, 'seconds'

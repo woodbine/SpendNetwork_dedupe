@@ -186,7 +186,7 @@ def create_table(table_name, table_schema, column_names):
     c = con.cursor()
 
     print ('creating results table {}...'.format(table_name))
-    c.execute('DROP TABLE IF EXISTS ocds.{}'.format(table_name))  # get rid of the table (so we can make a new one)
+    c.execute('DROP TABLE IF EXISTS {}.{}'.format(table_schema, table_name))  # get rid of the table (so we can make a new one)
     field_string = ','.join('%s varchar(500000)' % name for name in column_names)
     c.execute('CREATE TABLE {}.{} ({})'.format(table_schema, table_name, field_string))
     con.commit()
