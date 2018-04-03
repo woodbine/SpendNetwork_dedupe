@@ -194,7 +194,7 @@ def create_table(table_name, table_schema, column_names):
     con.close()
     return
 
-def add_data_to_table(table_name, table_schema, query, column_names, clustered_dupes, clusters_index_start=0):
+def add_data_to_table(table_name, table_schema, query, column_names, clustered_dupes, clusters_index_start=0, id_index=0):
     """adds the deduped data to table"""
 
     # start connection
@@ -215,7 +215,7 @@ def add_data_to_table(table_name, table_schema, query, column_names, clustered_d
             for row in data:  # data is a list, but isn't each row a dict? NO because data was redefined above
                 # so I think this assumes that the the first value in each row from the table is an id
                 # so if the row id matches the record_id from the clustered_dupes...
-                if record_id == int(row[0]):
+                if record_id == int(row[id_index]):
                     row = list(row)  # turn the tuple into a list
                     row.insert(0, cluster_id)  # put the cluster_id at the beginning of the list
                     row = tuple(row)  # make it a tuple again
