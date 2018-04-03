@@ -12,11 +12,12 @@ import collections
 import time
 import logging
 import optparse
-
+from dotenv import load_dotenv, find_dotenv
 import psycopg2 as psy
 import psycopg2.extras
 from unidecode import unidecode
 
+# parser for debugging
 optp = optparse.OptionParser()
 optp.add_option('-v', '--verbose', dest='verbose', action='count',
                 help='Increase verbosity (specify multiple times for more)'
@@ -29,58 +30,76 @@ elif opts.verbose >= 2:
     log_level = logging.DEBUG
 logging.getLogger().setLevel(log_level)
 
-settings_file = 'postgres_settings'
-training_file = 'postgres_training.json'
+# settings and training files
+settings_file = 'data_matching_learned_settings'
+training_file = 'data_matching_training.json'
+
+# select alphabetic segment of table you want to dedupe
+alphabetic_filter = "AB%"
+
+# local database details (to use when testing)
+dbname = "postgres"
+user = "postgres"
+password = "postgres"
+host = "host"
+
+# get the remote database details from .env
+load_dotenv(find_dotenv())
+host_remote = os.environ.get("HOST_REMOTE")
+dbname_remote = os.environ.get("DBNAME_REMOTE")
+user_remote = os.environ.get("USER_REMOTE")
+password_remote = os.environ.get("PASSWORD_REMOTE")
 
 start_time = time.time()
 
 # TWO SEPARATE CONNECTION SESSIONS
 # the first to be used for fetching the data (or rather the fields that are used for dedupe)
-
-con = psy.connect(database='database', user = 'user', host='host', password='password')
-
-con2 = psy.connect(database='database', user = 'user', host='host', password='password')
+con1 = psy.connect(host=host_remote, dbname=dbname_remote, user=user_remote, password=password_remote)
 
 # dictionary cursor, allows data retrieval using dicts
-c1 = con.cursor(cursor_factory=psy.extras.RealDictCursor)
-c2 = con.cursor(cursor_factory=psy.extras.RealDictCursor)
+c1 = con1.cursor(cursor_factory=psy.extras.RealDictCursor)
 
-SELECT_DATA_1 = 'SELECT sss FROM public.usm3 WHERE (sss LIKE 'AB%') AND (sid IS NULL)'
-SELECT_DATA_0 = 'SELECT AS FROM public.supplier WHERE (supplier_name LIKE 'AB%') AND (supplier_id IS NOT NULL)'
+SELECT_DATA_0 = "SELECT id, sss FROM blue.usm3 WHERE (sss LIKE '{}') AND (sid IS NULL)".format(alphabetic_filter)
+SELECT_DATA_1 = "SELECT rid AS id, supplier_name AS sss FROM blue.supplier WHERE (supplier_name LIKE '{}') AND (supplier_id IS NOT NULL)".format(alphabetic_filter)
 
 def preProcess(column):
-    try : # python 2/3 string differences
+    # takes in the key, value pair from data_select - then processes them for deduping later
+    try:  # python 2/3 string differences
         column = column.decode('utf8')
     except AttributeError:
         pass
-    column = unidecode(column)
-    column = re.sub('  +', ' ', column)
-    column = re.sub('\n', ' ', column)
-    column = column.strip().strip('"').strip("'").lower().strip()
-    if not column :
-        column = None
+    if not isinstance(column, int):
+        if not column:
+            column = None
+        else:
+            # get rid of spaces/newlines
+            column = unidecode(column)
+            column = re.sub('  +', ' ', column)
+            column = re.sub('\n', ' ', column)
+            column = column.strip().strip('"').strip("'").lower().strip()
     return column
 
-print 'importing first data ...'
-c1.execute(SELECT_DATA_1)
-data= c1.fetchall() # what does this do exactly?
+data_d0 = {}
+data_d1 = {}
+data_list = [data_d0, data_d1] # list to hold both dictionaries needed for deduping
 
-# maybe do the below twice for each dataset
-data_d1 = {} #Think this is the cleaned data (in dictionary form)
+for i, query in enumerate([SELECT_DATA_0, SELECT_DATA_1]):
+    print "importing dataset {}...".format(str(i))
+    c1.execute(query)
+    data = c1.fetchall()
+    for row in data:
+        # each row is a dictionary
+        clean_row = [(k, preProcess(v)) for (k, v) in row.items()]  # what are the keys and values here? are the keys each field name
+        row_id = row['id']  # think i'd need to edit this if we don't have id
+        data_list[i][row_id] = dict(clean_row)  # not sure exactly why we undictionaried and then dictionaried cleanrow...
 
-for row in data:
-    # each row is a dictionary
-    clean_row = [(k, preProcess(v)) for (k, v) in row.items()] # what are the keys and values here? are the keys each field name
-    row_id = int(row['id']) # think i'd need to edit this if we don't have id
-    data_d1[row_id] = dict(clean_row) # not sure exactly why we undictionaried and then dictionaried cleanrow...
-
-print 'importing second data...'
-
+# close conection
+con1.close()
 
 if os.path.exists(settings_file):
     print 'reading from', settings_file
     with open(settings_file) as sf :
-        deduper = dedupe.StaticDedupe(sf)
+        linker = dedupe.StaticRecordLink(sf)
 
 else:
     fields = [
@@ -90,34 +109,28 @@ else:
     linker = dedupe.RecordLink(fields)
     # deduper = dedupe.Dedupe(fields)
 
-    linker.sample(data_d1, data_d2, 15000)
-    # deduper.sample(data_d, 150000)
+    linker.sample(data_list[0], data_list[1], 15000)
 
     if os.path.exists(training_file):
         print 'reading labeled examples from ', training_file
         with open(training_file) as tf :
-            deduper.readTraining(tf)
+            linker.readTraining(tf)
 
     print 'starting active labeling...'
 
-    # dedupe.consoleLable(liker)
-    dedupe.consoleLabel(deduper)
+    dedupe.consoleLabel(linker)
 
-    # linker.train()
-    deduper.train()
+    linker.train()
     
     with open(training_file, 'w') as tf :
-        deduper.writeTraining(tf)
+        linker.writeTraining(tf)
 
     with open(settings_file, 'w') as sf :
-        deduper.writeSettings(sf)
+        linker.writeSettings(sf)
 
-print 'blocking...'
-
-threshold = deduper.threshold(data_d, recall_weight=2)
 
 print 'clustering...'
-clustered_dupes = deduper.match(data_d, threshold)
+clustered_dupes = linker.match(data_list[0], data_list[1], threshold=0.5)
 
 print '# duplicate sets', len(clustered_dupes)
 

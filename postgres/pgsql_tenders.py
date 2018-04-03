@@ -36,7 +36,6 @@ import time
 import logging
 import optparse
 from dotenv import load_dotenv, find_dotenv
-
 import psycopg2 as psy
 import psycopg2.extras
 from unidecode import unidecode
