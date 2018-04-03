@@ -8,7 +8,7 @@ First checks to see if a settings file exists (which stores the deduping model).
 IF settings file exists:
 
 1) loads deduper from settings file.
-2) creates a table for storing dedupe results.
+2) creates a table for storing dedupe results (and overwrites table if it already exists)
 3) pulls data to be deduped from database.
 2) dedupes data using the loaded settings.
 3) Adds the deduped data to table.
@@ -41,50 +41,6 @@ import psycopg2 as psy
 import psycopg2.extras
 from unidecode import unidecode
 
-
-# settings and training files
-# if settings file does not exist then new model will be trained
-tender_settings_file = 'tender_settings_w_enddate'
-tender_training_file = 'tender_training_w_enddate.json'
-
-# select where to get the data for deduping from, the country for deduping, and the releasedate ranges
-data_source = "ocds.ocds_tenders_view"
-select_country = "United Kingdom"
-select_date_ranges = [['2017-01-01', '2017-01-10'],
-                      ['2017-01-11', '2017-01-21']]
-
-# specify fields to pull from the tenders table (make sure to pull all the fields you need for deduping later)
-input_fields = ["id",
-                "title",
-                "value",
-                "description",
-                "buyer",
-                "postcode",
-                "email",
-                "enddate"
-                ]
-
-# column names that you want in the results table (make sure to have the cluster_id field first)
-output_fields = ["cluster_id"] + input_fields + ["startdate", "releasedate", "source"]
-
-# name of results table
-results_table = "ocds_tenders_deduped_enddate_test"
-
-# settings for pulling data to train the deduper
-training_source = data_source
-training_country = select_country
-training_date_range = ['2017-01-01', '2017-01-10']
-
-# dedupe training fields
-tender_fields = [
-        {'field': 'title', 'type': 'String'},
-        {'field': 'value', 'type': 'Price'},
-        #{'field': 'description', 'type': 'Text'},
-        {'field': 'buyer', 'type': 'String'},
-        {'field': 'postcode', 'type': 'String'},
-        {'field': 'email', 'type': 'String'},
-        {'field': 'enddate', 'type': 'DateTime', 'dayfirst': True}
-    ]
 
 # local database details (to use when testing)
 dbname = "postgres"
@@ -223,7 +179,7 @@ def custom_dedupe(deduper, data_d):
 
     return clustered_dupes
 
-def create_table(table_name, column_names):
+def create_table(table_name, table_schema, column_names):
     """creates table for holding the deduped data"""
 
     print ('connecting to db...')
@@ -233,13 +189,13 @@ def create_table(table_name, column_names):
     print ('creating results table {}...'.format(table_name))
     c.execute('DROP TABLE IF EXISTS ocds.{}'.format(table_name))  # get rid of the table (so we can make a new one)
     field_string = ','.join('%s varchar(500000)' % name for name in column_names)
-    c.execute('CREATE TABLE ocds.{} ({})'.format(table_name, field_string))
+    c.execute('CREATE TABLE {}.{} ({})'.format(table_schema, table_name, field_string))
     con.commit()
 
     con.close()
     return
 
-def add_data_to_table(table_name, query, column_names, clustered_dupes, clusters_index_start=0):
+def add_data_to_table(table_name, table_schema, query, column_names, clustered_dupes, clusters_index_start=0):
     """adds the deduped data to table"""
 
     # start connection
@@ -275,7 +231,7 @@ def add_data_to_table(table_name, query, column_names, clustered_dupes, clusters
     mog = "(" + ("%s," * (num_cols - 1)) + "%s)"
     args_str = ','.join(c2.mogrify(mog, x) for x in full_data)  # mogrify is used to make query strings
     values = "(" + ','.join(x for x in column_names) + ")"
-    c2.execute("INSERT INTO ocds.{} {} VALUES {}".format(table_name, values, args_str))
+    c2.execute("INSERT INTO {}.{} {} VALUES {}".format(table_schema, table_name, values, args_str))
     con2.commit()
     con2.close()
 
@@ -284,6 +240,51 @@ def add_data_to_table(table_name, query, column_names, clustered_dupes, clusters
 
 
 if __name__ == '__main__':
+
+    # settings and training files
+    # if settings file does not exist then new model will be trained
+    tender_settings_file = 'tender_settings_w_enddate'
+    tender_training_file = 'tender_training_w_enddate.json'
+
+    # select where to get the data for deduping from, the country for deduping, and the releasedate ranges
+    data_source = "ocds.ocds_tenders_view"
+    select_country = "United Kingdom"
+    select_date_ranges = [['2017-01-01', '2017-01-10'],
+                          ['2017-01-11', '2017-01-21']]
+
+    # specify fields to pull from the tenders table (make sure to pull all the fields you need for deduping later)
+    input_fields = ["id",
+                    "title",
+                    "value",
+                    "description",
+                    "buyer",
+                    "postcode",
+                    "email",
+                    "enddate"
+                    ]
+
+    # column names that you want in the results table (make sure to have the cluster_id field first)
+    output_fields = ["cluster_id"] + input_fields + ["startdate", "releasedate", "source"]
+
+    # name of results table and schema it's stored in
+    results_schema = "ocds"
+    results_table = "ocds_tenders_deduped_april"
+
+    # settings for pulling data to train the deduper
+    training_source = data_source
+    training_country = select_country
+    training_date_range = ['2017-01-01', '2017-01-10']
+
+    # dedupe training fields
+    tender_fields = [
+        {'field': 'title', 'type': 'String'},
+        {'field': 'value', 'type': 'Price'},
+        # {'field': 'description', 'type': 'Text'},
+        {'field': 'buyer', 'type': 'String'},
+        {'field': 'postcode', 'type': 'String'},
+        {'field': 'email', 'type': 'String'},
+        {'field': 'enddate', 'type': 'DateTime', 'dayfirst': True}
+    ]
 
     start_time = time.time()
     debugger_setup()
@@ -296,7 +297,7 @@ if __name__ == '__main__':
             deduper = dedupe.StaticDedupe(sf)
 
         # construct results table
-        create_table(results_table, output_fields)
+        create_table(results_table, results_schema, output_fields)
         # start the cluster_id at 0
         current_index = 0
 
@@ -318,7 +319,7 @@ if __name__ == '__main__':
             # add the results to the table
             # make query to get the rest of the data we want in the table
             output_query = construct_query(output_fields[1:], data_source, date_range, select_country)
-            add_data_to_table(results_table, output_query, output_fields, clusters, clusters_index_start=current_index)
+            add_data_to_table(results_table, results_schema, output_query, output_fields, clusters, clusters_index_start=current_index)
 
             # update the index for clusters_id (for the next set of clusters to be added to the results table)
             current_index = len(clusters)
