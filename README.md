@@ -24,7 +24,7 @@ Possible improvements:
     - for usm3/suppliers this means trying to get the existing training data in the correct format
     - for tenders this means having someone manually verify more samples
 
-- loop over new data and add the newly deduped data to a table
+- loop over new data and add the newly deduped data to a table (for single_file and record_linkage)
 
 - improve some of the comparators, e.g. use corpus for the description field in tenders.
 
