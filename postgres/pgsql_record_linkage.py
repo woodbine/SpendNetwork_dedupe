@@ -35,7 +35,7 @@ logging.getLogger().setLevel(log_level)
 settings_file = 'data_matching_learned_settings'
 training_file = 'data_matching_training.json'
 
-table_name = "usm3_suppliers_matched"
+table_name = "usm3_suppliers_matched_TEST"
 table_schema = "blue"
 
 column_names = ["cluster_id", "id", "sss", "rid", "supplier_name"]
@@ -165,31 +165,20 @@ full_data = []
 print data0
 print data1
 
+datalist = [data0, data1]
+
 cluster_membership = collections.defaultdict(lambda : 'x') #?
 for cluster_id, (cluster, score) in enumerate(clustered_dupes):
+    line = []
+    line.insert(0, cluster_id)
     for datasource, record_id in enumerate(cluster):
-        # treat the two separate record ids differently - i.e. use different data for next step from the different queries
-        if datasource == 0:
-            # if the id we're looking at is for usm3
-            for row in data0:
-                if record_id == int(row[0]):
-                    row = list(row)
-                    row.insert(0,cluster_id)
-                    # add two blank rows on the end to cover rid and supplier name
-                    row = row + [None, None]
-                    row = tuple(row)
-                    full_data.append(row)
-        if datasource == 1:
-            # if the id we're looking at is for suppliers table
-            for row in data1:
-                if record_id == int(row[0]):
-                    row = list(row)
-                    row.insert(0,cluster_id)
-                    # add two blanks to cover id and sss
-                    row.insert(1, None)
-                    row.insert(1, None)
-                    row = tuple(row)
-                    full_data.append(row)
+        # for each table (usm3 and suppliers), find the corresponding
+        for row in datalist[datasource]:
+            if record_id == int(row[0]):
+                row = list(row)
+                line += row
+    line = tuple(line)
+    full_data.append(line)
 
 
 # create the results table
