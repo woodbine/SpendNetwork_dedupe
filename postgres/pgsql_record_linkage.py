@@ -172,7 +172,7 @@ for cluster_id, (cluster, score) in enumerate(clustered_dupes):
     line = []
     line.insert(0, cluster_id)
     for datasource, record_id in enumerate(cluster):
-        # for each table (usm3 and suppliers), find the corresponding
+        # for each table (usm3 and suppliers), find the corresponding rows to be added to the output results table
         for row in datalist[datasource]:
             if record_id == int(row[0]):
                 row = list(row)
